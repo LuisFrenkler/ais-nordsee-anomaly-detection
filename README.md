@@ -1,48 +1,50 @@
-# AIS Nordsee – Validierung gemeldeter Schiffstypen mit Unsupervised Learning
+# AIS North Sea – Validating Reported Ship Types with Unsupervised Learning
 
-Im AIS-System (Automatic Identification System) tragen die Besatzungen den Schiffstyp von Hand ein. Position und Geschwindigkeit kommen dagegen automatisch per GPS. Der gemeldete Typ kann also falsch sein, durch Tippfehler, veraltete Einstellungen oder bewusste Täuschung.
+In the AIS (Automatic Identification System), the crew enters the ship type by hand, while position and speed come automatically from GPS. The reported type can therefore be wrong, whether through typos, outdated settings or deliberate deception.
 
-**Forschungsfrage:** Lässt sich am tatsächlichen Fahrverhalten erkennen, ob der gemeldete Schiffstyp plausibel ist?
+**Research question:** Can a ship's actual movement behaviour reveal whether its reported type is plausible?
 
-Supervised Learning scheidet aus, weil genau die Labels (die gemeldeten Typen) angezweifelt werden. Die Modelle arbeiten deshalb rein unsupervised. Der gemeldete Typ fließt nie als Feature ein, sondern dient erst am Ende als unabhängige Referenz zur Validierung.
+Supervised learning is not an option, because the labels themselves (the reported types) are what is in doubt. The models therefore work purely unsupervised. The reported type is never used as a feature; it only serves as an independent reference for validation at the end.
 
-## Daten
+![Consensus anomalies in PCA space](images/consensus_anomalies.png)
 
-| Datei | Inhalt |
+## Data
+
+| File | Content |
 |---|---|
-| `aisdk_2026_nordsee_500k.csv` | 500.000 AIS-Signale aus der Nordsee und westlichen Ostsee (01.01.2026, ca. 1 Stunde), Quelle: dänische Seefahrtsbehörde (AIS-DK) |
-| `nordseehaefen.csv` | Koordinaten großer Nordseehäfen (OpenStreetMap / Wikipedia), zur Anreicherung der Features |
+| `aisdk_2026_nordsee_500k.csv` | 500,000 AIS messages from the North Sea and western Baltic Sea (1 Jan 2026, approx. 1 hour), source: Danish Maritime Authority (AIS-DK) |
+| `nordseehaefen.csv` | Coordinates of major North Sea ports (OpenStreetMap / Wikipedia), used to enrich the features |
 
-## Vorgehen
+## Approach
 
-1. **Cleaning:** ungültige GPS-Werte (Latitude = 91.0) und Positionen außerhalb des Gebiets entfernen, Schiffstypen auf sechs Kategorien abbilden (Cargo, Tanker, Fishing, Passenger, Sailing/Pleasure, Tug/Towing).
-2. **Aggregation pro Schiff (MMSI):** Alle Signale eines Schiffs werden zu einem Datenpunkt zusammengefasst. Das ergibt 1.394 Schiffe mit 16 Features.
-3. **Features:** Abmessungen (Länge, Breite, Tiefgang), Geschwindigkeitsstatistiken (SOG), Kursvariabilität (COG), Anteile der Navigationsstatus, Position und Streuung, dazu die Distanz zum nächsten Hafen per Haversine-Formel.
-4. **Drei Methoden zur Anomalie-Erkennung:**
-   - **K-Means** (k = 6): Ausreißer über die Distanz zum Clusterzentrum, Schwellwert nach IQR-Regel
-   - **DBSCAN** (Grid Search über eps und min_samples): Noise-Punkte gelten als Ausreißer
-   - **Isolation Forest** (Hyperparameter-Tuning): Schwellwert nach IQR-Regel auf den Anomaly Scores
-5. **Consensus:** Ein Schiff gilt als verdächtig, wenn mindestens zwei der drei Methoden anschlagen.
-6. **Validierung:** Kreuztabelle Cluster vs. gemeldeter Typ, Plausibilitätschecks, Sensitivitätsanalyse des IQR-Faktors und Vergleich mit vs. ohne Hafendaten.
+1. **Cleaning:** remove invalid GPS values (latitude = 91.0) and positions outside the area, map ship types to six categories (Cargo, Tanker, Fishing, Passenger, Sailing/Pleasure, Tug/Towing).
+2. **Aggregation per ship (MMSI):** all messages of a ship are combined into a single data point, resulting in 1,394 ships with 16 features.
+3. **Features:** dimensions (length, width, draught), speed statistics (SOG), course variability (COG), navigation status shares, position and spread, plus the distance to the nearest port using the haversine formula.
+4. **Three anomaly detection methods:**
+   - **K-Means** (k = 6): outliers based on distance to the cluster centre, threshold via IQR rule
+   - **DBSCAN** (grid search over eps and min_samples): noise points are treated as outliers
+   - **Isolation Forest** (hyperparameter tuning): IQR-rule threshold on the anomaly scores
+5. **Consensus:** a ship is considered suspicious if at least two of the three methods flag it.
+6. **Validation:** cross-tabulation of clusters vs. reported type, plausibility checks, sensitivity analysis of the IQR factor and a comparison with vs. without port data.
 
-## Ergebnisse
+## Results
 
-| Methode | Silhouette | Anomalien |
+| Method | Silhouette | Anomalies |
 |---|---|---|
-| K-Means (k = 6) | 0,257 | 48 (3,4 %) |
-| DBSCAN | 0,343 | 23 (1,6 %) |
-| Isolation Forest | – | 58 (4,2 %) |
+| K-Means (k = 6) | 0.257 | 48 (3.4 %) |
+| DBSCAN | 0.343 | 23 (1.6 %) |
+| Isolation Forest | – | 58 (4.2 %) |
 
-- **44 Schiffe** werden von mindestens zwei Methoden markiert, 14 davon von allen drei.
-- Bei **25** dieser 44 Schiffe passt der gemeldete Typ nicht zum dominanten Typ ihres Clusters. **11** davon liegen in eindeutigen Clustern (mindestens 70 % ein Typ). Das sind die stärksten Verdachtsfälle.
-- K-Means findet allein über das Verhalten einen Cluster, der zu **100 % aus Fischereischiffen** besteht.
-- Die wichtigsten Merkmale für Anomalien sind Geschwindigkeit, Tiefgang und Schiffsgröße. Die externen Hafendaten bringen kaum etwas (Rang 14 und 16 von 16).
+- **44 ships** are flagged by at least two methods, 14 of them by all three.
+- For **25** of these 44 ships, the reported type does not match the dominant type of their cluster. **11** of them lie in clear-cut clusters (at least 70 % one type) – these are the strongest suspects.
+- Based on behaviour alone, K-Means finds a cluster consisting of **100 % fishing vessels**.
+- The most important features for anomalies are speed, draught and ship size. The external port data adds little (ranks 14 and 16 of 16).
 
-**Grenzen:** Die Daten decken nur rund eine Stunde am Neujahrstag ab, und über die Hälfte der Schiffe steht still. Die Verdachtsfälle sind daher Hinweise, keine Beweise für Falschmeldungen.
+**Limitations:** the data covers only about one hour on New Year's Day, and more than half of the ships are stationary. The suspicious cases are therefore indications, not proof of false reporting.
 
-## Ausführen
+## Running the Notebook
 
-Benötigt Python 3.11 oder neuer.
+Requires Python 3.11 or newer.
 
 ```bash
 python3 -m venv .venv
@@ -51,9 +53,10 @@ pip install -r requirements.txt
 jupyter notebook AIS_Nordsee_Unsupervised_Final.ipynb
 ```
 
-Die beiden CSV-Dateien müssen im selben Ordner wie das Notebook liegen. Ein kompletter Durchlauf dauert etwa zwei Minuten.
+Both CSV files must be in the same folder as the notebook. A full run takes about two minutes. Comments and plot labels in the notebook are in German.
 
-## Dateien
+## Files
 
-- `AIS_Nordsee_Unsupervised_Final.ipynb` – Notebook mit der kompletten Analyse
-- `requirements.txt` – benötigte Python-Pakete
+- `AIS_Nordsee_Unsupervised_Final.ipynb` – notebook with the complete analysis
+- `requirements.txt` – required Python packages
+- `images/` – figures used in this README
